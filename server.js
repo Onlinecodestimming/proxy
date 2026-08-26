@@ -19,28 +19,14 @@ import { createBlocklist } from './lib/blocklist.js';
 import { createParamMatcher } from './lib/params.js';
 import { createCookiePolicy, CookieJar } from './lib/cookies.js';
 import { createProxyHandler } from './lib/proxy.js';
-import { loadProfiles } from './lib/stealth.js';
+import { loadProfiles, resolveProfile } from './lib/stealth.js';
 import { assertPublicHost } from './lib/ssrf.js';
+
+export { resolveProfile };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'static', 'index.html'), 'utf8');
 const FIXTURE_GMAIL_HTML = fs.readFileSync(path.join(__dirname, 'static', 'fixtures', 'gmail-mock.html'), 'utf8');
-
-/**
- * Resolve the stealth profile to use.
- * Precedence: explicit option > VEIL_PROFILE env > config default.
- * 'none'/'off' disables stealth (legacy pass-through headers).
- */
-export function resolveProfile(name, { defaultName, profiles }) {
-  const requested = name !== undefined ? name : process.env.VEIL_PROFILE || defaultName;
-  if (!requested || requested === 'none' || requested === 'off') return { name: 'none', profile: null };
-  const profile = profiles[requested];
-  if (!profile) {
-    console.warn(`veil: unknown profile '${requested}' — available: ${Object.keys(profiles).join(', ')} — falling back to pass-through`);
-    return { name: 'none', profile: null };
-  }
-  return { name: requested, profile };
-}
 
 export function createVeilServer({ allowLoopback = false, fetchImpl, trackers, params, cookies, profile } = {}) {
   const cfg = loadConfig({ trackers, params, cookies });

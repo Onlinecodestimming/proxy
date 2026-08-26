@@ -81,7 +81,9 @@ feed.
 ## Using it in a browser (drop-in modes)
 
 Requirements: **Node ≥ 18.17** (20+ recommended), that's it — no `npm install`,
-no build step. Copy the folder anywhere and `node server.js`.
+no build step. Copy the folder anywhere and `node server.js`. (No local
+server at all? [Deploy to Vercel](#deploying-to-vercel-serverless-mode) —
+different feature set, same pipeline.)
 
 **Mode 1 — front page (recommended: fully protected)**
 Open `http://localhost:3000` and browse from there. The page **and every
@@ -117,6 +119,50 @@ protection for HTTPS, use Mode 1 for that site.
 | `CONNECT host:port` | blind TLS tunnel (Mode 2, HTTPS — IP mask only) |
 | `/stats`         | JSON counters + recent blocks              |
 | `/stats/reset`   | zero the counters                          |
+
+## Deploying to Vercel (serverless mode)
+
+Yes — Veil deploys to Vercel. But Vercel runs stateless request handlers, not
+a long-lived process, so the repo ships a serverless adapter (`api/`) that
+runs the **exact same proxy pipeline** as `server.js` — same param scrubbing,
+tracker blocklist, cookie policy, stealth identity, SSRF guard, redirect
+re-scrubbing, HTML rewriting — plus a `vercel.json` that maps the clean URLs
+(`/p/…`, `/stats`, `/`, `/fixtures/gmail`) onto the functions.
+
+- **Dashboard**: Vercel → *Add New Project* → import this repo → framework
+  preset **Other** (auto-detected) → Deploy. No build step, no env vars needed.
+- **CLI**: `npx vercel` from the repo root.
+
+What you get on Vercel:
+
+| Works | Notes |
+| ----- | ----- |
+| `/` front page + **bookmarklet** | drag the bookmarklet to your bookmarks bar; on any site, click it and the page reloads through this deployment |
+| `/p/<urlencoded-url>` | the full proxy, fully sanitized |
+| stealth identity | same synthesized browser headers; set `VEIL_PROFILE` (`chrome-win`/`firefox-win`/`none`) in Vercel project env to switch |
+| sessions, no database | upstream session cookies persist **in your browser's own cookie jar** on the veil origin (`vh_…` cookies, `lib/cookie-forward.js`) — nothing to configure, no KV needed |
+| `/stats`, `/fixtures/gmail` | work; the front page shows a "serverless mode" notice |
+
+What Vercel physically cannot do, and what Veil therefore drops there:
+
+- **CONNECT tunnels / system-proxy mode** — serverless functions get no raw
+  sockets, so "set Veil as my system proxy" doesn't exist on Vercel. Use the
+  front-page bookmarklet instead.
+- **Persistent stats** — nothing survives between invocations.
+- **Pages over 4 MB** — Hobby caps function responses at 4.5 MB
+  (`VEIL_MAX_RESPONSE_BYTES` raises it on Pro, where the cap is higher).
+- **10 s request timeout** on Hobby (`VEIL_TIMEOUT_MS` tunes the upstream
+  fetch to stay under it; Pro allows longer).
+- **Egress IP** is Vercel's shared cloud range — see the honest-limitations
+  list below.
+
+`npm start` on a VPS / Railway / Render / your laptop remains the
+full-featured mode: tunnels, persistent stats, bigger pages, longer timeouts.
+
+**One warning**: a Vercel deployment is a **public URL**. Anyone who finds it
+can use it as their anonymous proxy — your function invocations and bandwidth
+bill, their browsing. Keep it personal (or put auth in front) — same rule as
+the local server's "no auth" note.
 
 ## Honest limitations
 
@@ -185,18 +231,23 @@ supervised.
 ```
 server.js            entrypoint + routing (resolves the stealth profile)
 lib/proxy.js         proxy engine (fetch loop, redirects, responses)
-lib/stealth.js       synthesized browser identity + request-kind detection
+lib/stealth.js       synthesized browser identity + request-kind detection + profile resolution
 lib/headers.js       outbound header assembly (stealth on/off)
 lib/rewrite.js       HTML URL rewriting + HUD badge
 lib/cookies.js       tracking-cookie policy + origin-scoped jar
+lib/cookie-forward.js serverless session persistence via the browser's cookie jar
 lib/blocklist.js     tracker domain/endpoint/global-path matching
 lib/params.js        tracking query-param stripping
 lib/ssrf.js          internal-address guard
 lib/stats.js         in-memory telemetry
+api/p/[...url].js    Vercel: /p/ proxy function (same pipeline as server.js)
+api/stats.js         Vercel: /stats + /stats/reset (per-invocation)
+api/_internal.js     Vercel: request/response shape adapters (not a route)
+vercel.json          Vercel: URL rewrites (/, /p/, /stats, /fixtures)
 config/trackers.json   blocked hosts + endpoints + global paths (incl. $guardian)
 config/tracking-params.json  tracking query params
 config/tracking-cookies.json tracking cookie names
 config/profiles.json   stealth browser identities (chrome-win, firefox-win)
-static/index.html    front page
-test/                node:test unit + integration suites
+static/index.html    front page (with bookmarklet for the hosted deployment)
+test/                node:test unit + integration + serverless suites
 ```

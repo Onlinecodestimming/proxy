@@ -57,6 +57,11 @@ code { background:#0a0f17; border:1px solid var(--line); border-radius:5px; padd
   <button data-u="https://archive.org/">archive.org</button>
 </div>
 
+<p style="color:var(--dim);font-size:13.5px;margin:18px 0 4px">
+  drag <a id="bookmarklet" href="#" title="drag me to your bookmarks bar" style="background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 14px;display:inline-block;cursor:grab">🛡 browse via veil</a>
+  onto your bookmarks bar — on <em>any</em> site, click it and the page reloads through this deployment. (or paste links into the box above)
+</p>
+
 <section class="stats">
   <div class="stat"><div class="n" id="s-proxied">0</div><div class="l">requests sanitized</div></div>
   <div class="stat"><div class="n" id="s-tunneled">0</div><div class="l">https tunnels (ip masked)</div></div>
@@ -95,6 +100,9 @@ code { background:#0a0f17; border:1px solid var(--line); border-radius:5px; padd
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
+// Bookmarklet for THIS deployment (works wherever the front page is hosted).
+$('#bookmarklet').href =
+  'javascript:location.href=' + JSON.stringify(location.origin + '/p/') + '+encodeURIComponent(location.href)';
 function go(u) {
   u = (u || '').trim();
   if (!u) return;
@@ -106,6 +114,14 @@ document.querySelectorAll('#chips button').forEach((b) => b.addEventListener('cl
 async function poll() {
   try {
     const s = await (await fetch('/stats')).json();
+    if (s.serverless) {
+      // Serverless host (e.g. Vercel): no shared memory between requests,
+      // so counters are per-invocation — say so once and stop polling.
+      $('#s-tunneled').textContent = 'n/a';
+      document.querySelector('#blocked .head').textContent =
+        'serverless mode — sessions persist via cookies; counters are per-request (no shared memory on this host)';
+      return;
+    }
     $('#s-proxied').textContent = s.proxied;
     $('#s-tunneled').textContent = s.tunneled;
     $('#s-blocked').textContent = s.trackersBlocked;
