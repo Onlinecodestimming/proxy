@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createVeilServer } from '../server.js';
 import { proxyUrlFor } from '../lib/rewrite.js';
+import { loadProfiles } from '../lib/stealth.js';
+
+const { defaultName, profiles } = loadProfiles();
+const ID = profiles[defaultName]; // the identity veil presents by default
 
 // A mock "upstream" website with a session cookie, a tracking cookie,
 // a first-party script, and a tracker under /tracked/.
@@ -37,6 +41,11 @@ before(async () => {
       ua: req.headers['user-agent'] || null,
       secChUa: req.headers['sec-ch-ua'] || null,
       accept: req.headers.accept || null,
+      secFetchSite: req.headers['sec-fetch-site'] || null,
+      secFetchMode: req.headers['sec-fetch-mode'] || null,
+      secFetchDest: req.headers['sec-fetch-dest'] || null,
+      priority: req.headers.priority || null,
+      upgrade: req.headers['upgrade-insecure-requests'] || null,
     });
     const u = new URL(req.url, 'http://127.0.0.1');
     if (u.pathname === '/page') {
@@ -69,7 +78,11 @@ before(async () => {
 
   veil = createVeilServer({
     allowLoopback: true,
-    trackers: { hosts: [], endpoints: [{ host: '127.0.0.1', wildcard: true, prefixes: ['/tracked/'], exact: [] }] },
+    trackers: {
+      hosts: [],
+      endpoints: [{ host: '127.0.0.1', wildcard: true, prefixes: ['/tracked/'], exact: [] }],
+      paths: { prefixes: ['/_px/', '/D/1/'], exact: [] },
+    },
   });
   vport = await listen(veil.server);
 });
@@ -84,7 +97,14 @@ const px = (target) => `http://127.0.0.1:${vport}/p/` + encodeURIComponent(targe
 
 test('navigation: HTML is rewritten, cookies are filtered, params are scrubbed', async () => {
   const r = await fetch(px(`${up('/page')}?utm_source=ads&fbclid=zz&keep=1`), {
-    headers: { 'user-agent': 'TestBrowser/9', 'sec-ch-ua': '"Chrome";v="126"' },
+    // a real browser's navigation request: browser-like Accept, plus a
+    // client identity that veil must not forward
+    headers: {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'user-agent': 'TestBrowser/9',
+      'sec-ch-ua': '"WeirdBrowser";v="1"',
+      'accept-language': 'de-DE',
+    },
   });
   assert.equal(r.status, 200);
   assert.ok((r.headers.get('content-type') || '').includes('text/html'));
@@ -99,13 +119,20 @@ test('navigation: HTML is rewritten, cookies are filtered, params are scrubbed',
   // HUD badge injected
   assert.ok(html.includes('id="veil-hud"'));
 
-  // The mock saw a clean first request: entry tracking params stripped,
-  // no cookies yet, no fingerprint headers, client UA preserved.
+  // The mock saw the synthesized identity: entry tracking params stripped,
+  // no cookies yet, and NOT a trace of the client's real device.
   const req = mockRequests[mockRequests.length - 1];
   assert.equal(req.url, '/page?keep=1'); // utm_source + fbclid stripped
   assert.equal(req.cookie, null);
-  assert.equal(req.secChUa, null);
-  assert.equal(req.ua, 'TestBrowser/9');
+  assert.equal(req.ua, ID.userAgent); // stealth profile, not 'TestBrowser/9'
+  assert.equal(req.secChUa, ID.secChUa);
+  assert.ok(!JSON.stringify(req).includes('TestBrowser'));
+  // sec-fetch context for a top-level navigation
+  assert.equal(req.secFetchSite, 'none');
+  assert.equal(req.secFetchDest, 'document');
+  assert.equal(req.secFetchMode, 'same-origin'); // undici can't emit 'navigate' (see stealth.js)
+  assert.equal(req.priority, ID.priorities.document);
+  assert.equal(req.upgrade, '1');
 });
 
 test('second request carries the session cookie, never the tracking one', async () => {
@@ -146,11 +173,30 @@ test('redirect hops are followed and re-scrubbed (relative location resolved)', 
   assert.ok(!req.url.includes('utm_source'));
 });
 
-test('referer is decoded and reduced to the bare upstream origin', async () => {
+test('referer is decoded and reduced to the bare upstream origin; subresources get script context', async () => {
   const pagePx = `http://127.0.0.1:${vport}${proxyUrlFor(up('/page'))}`;
-  await fetch(px(up('/site.js')), { headers: { referer: pagePx } });
+  await fetch(px(up('/site.js')), {
+    headers: {
+      referer: pagePx,
+      accept: '*/*', // what a browser sends for <script src>
+    },
+  });
   const req = mockRequests[mockRequests.length - 1];
   assert.equal(req.referer, `http://127.0.0.1:${mockPort}/`);
+  assert.equal(req.secFetchDest, 'script');
+  assert.equal(req.secFetchSite, 'same-origin');
+  assert.equal(req.secFetchMode, 'no-cors'); // browser-exact for classic scripts
+  assert.equal(req.ua, ID.userAgent); // same identity as the page load
+});
+
+test('guardian sensor uploads are blocked on any host (global path rules)', async () => {
+  for (const p of ['/_px/v4/sensor-payload', '/D/1/token123']) {
+    const before = mockRequests.length;
+    const r = await fetch(px(`${up(p)}`));
+    assert.notEqual(r.status, 404, p); // answered by veil, not the mock
+    assert.ok(r.headers.get('x-veil-blocked'), p);
+    assert.equal(mockRequests.length, before, `${p} must never reach upstream`);
+  }
 });
 
 test('SSRF: internal targets are refused before any network call', async () => {

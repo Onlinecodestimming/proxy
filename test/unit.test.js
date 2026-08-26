@@ -7,6 +7,8 @@ import { createCookiePolicy } from '../lib/cookies.js';
 import { rewriteHtml, proxyUrlFor } from '../lib/rewrite.js';
 import { isPrivateIp, isLoopbackIp, assertPublicHost, SsrfError } from '../lib/ssrf.js';
 import { buildOutboundHeaders, proxiedRefererToUpstream } from '../lib/headers.js';
+import { loadProfiles, detectKind } from '../lib/stealth.js';
+import { loadConfig } from '../lib/config.js';
 
 const PARAMS = {
   exact: ['fbclid', 'gclid', 'dclid', 'mc_cid', 'mkt_tok', 'spm', 'ref', '_gl', 'igshid', 'yclid'],
@@ -226,38 +228,171 @@ test('ssrf: assertPublicHost blocks internal targets (URL normalization covers t
   await assert.rejects(() => assertPublicHost('10.0.0.1', { allowLoopback: true }), SsrfError);
 });
 
-test('headers: fingerprint & context headers dropped, safe ones kept', () => {
+const { profiles } = loadProfiles();
+const CHROME = profiles['chrome-win'];
+assert.ok(CHROME, 'chrome-win profile must exist in config');
+
+test('stealth: document navigation presents the full browser identity, nothing from the client', () => {
   const clientHeaders = {
-    'user-agent': 'TestAgent/1.0',
+    'user-agent': 'TestAgent/1.0', // the client's REAL UA — must never leak
     'accept-language': 'de-DE,de;q=0.9',
-    accept: 'text/html',
-    'sec-ch-ua': '"Chromium";v="120"',
-    'sec-fetch-site': 'same-origin',
+    accept: 'text/html,application/xhtml+xml',
+    'sec-ch-ua': '"SomethingWeird";v="1"',
     origin: 'https://site.example.com',
-    referer: `https://proxy.example${proxyUrlFor('https://site.example.com/old')}`,
     'if-modified-since': 'Mon, 01 Jan 2024 00:00:00 GMT',
     cookie: 'should-not-pass=1',
   };
-  const h = buildOutboundHeaders(clientHeaders, 'https://site.example.com/new', null);
-  assert.equal(h['user-agent'], 'TestAgent/1.0');
-  assert.equal(h['accept-language'], 'de-DE,de;q=0.9');
-  assert.equal(h.accept, 'text/html');
-  assert.equal(h.referer, 'https://site.example.com/'); // bare upstream origin, no path
+  const { headers: h, fetchMode } = buildOutboundHeaders(
+    clientHeaders,
+    'https://site.example.com/new',
+    null,
+    { profile: CHROME }
+  );
+  // Identity comes from the profile, not the client
+  assert.equal(h['user-agent'], CHROME.userAgent);
+  assert.equal(h['sec-ch-ua'], CHROME.secChUa);
+  assert.equal(h['sec-ch-ua-platform'], CHROME.secChUaPlatform);
+  assert.equal(h['sec-ch-ua-mobile'], CHROME.secChUaMobile);
+  assert.equal(h['accept-language'], CHROME.acceptLanguage);
+  assert.equal(h.accept, CHROME.accepts.document);
+  assert.equal(h['accept-encoding'], CHROME.acceptEncoding);
+  // sec-fetch context for a top-level navigation
+  assert.equal(h['sec-fetch-site'], 'none');
+  assert.equal(h['sec-fetch-dest'], 'document');
+  assert.equal(h['sec-fetch-user'], '?1');
+  assert.equal(h['upgrade-insecure-requests'], '1');
+  assert.equal(h.priority, CHROME.priorities.document);
+  assert.equal(fetchMode, 'same-origin'); // closest to 'navigate' that fetch() allows
+  // Safe conditionals still pass; context headers never do
   assert.equal(h['if-modified-since'], 'Mon, 01 Jan 2024 00:00:00 GMT');
   assert.equal(h.cookie, undefined);
-  assert.equal(h['sec-ch-ua'], undefined);
-  assert.equal(h['sec-fetch-site'], undefined);
   assert.equal(h.origin, undefined);
-  assert.equal(h.dnt, '1');
+  assert.equal(h.dnt, undefined); // modern browsers don't send DNT
+  assert.equal(h['referrer-policy'], undefined);
 });
 
-test('headers: cross-origin referer is dropped entirely', () => {
-  const h = buildOutboundHeaders(
-    { referer: `https://proxy.example${proxyUrlFor('https://other.example.com/a')}` },
+test('stealth: subresources get browser-exact sec-fetch context per kind', () => {
+  const pageRef = `https://proxy.example${proxyUrlFor('https://site.example.com/page')}`;
+  // genuinely different registrable domain (same-site check is coarse: last two labels)
+  const otherRef = `https://proxy.example${proxyUrlFor('https://cdn-evil.net/page')}`;
+
+  const script = buildOutboundHeaders(
+    { accept: '*/*', referer: pageRef },
+    'https://site.example.com/lib.js',
+    null,
+    { profile: CHROME }
+  );
+  assert.equal(script.headers['sec-fetch-site'], 'same-origin');
+  assert.equal(script.headers['sec-fetch-dest'], 'script');
+  assert.equal(script.headers['upgrade-insecure-requests'], undefined);
+  assert.equal(script.fetchMode, 'no-cors');
+  assert.equal(script.headers.referer, 'https://site.example.com/');
+
+  const image = buildOutboundHeaders(
+    { accept: 'image/*,*/*', referer: pageRef },
+    'https://site.example.com/pic.png',
+    null,
+    { profile: CHROME }
+  );
+  assert.equal(image.headers['sec-fetch-dest'], 'image');
+  assert.equal(image.headers.accept, CHROME.accepts.image);
+
+  const css = buildOutboundHeaders(
+    { accept: 'text/css,*/*', referer: pageRef },
+    'https://site.example.com/site.css',
+    null,
+    { profile: CHROME }
+  );
+  assert.equal(css.headers['sec-fetch-dest'], 'style');
+  assert.equal(css.fetchMode, 'no-cors');
+
+  const crossImg = buildOutboundHeaders(
+    { accept: 'image/*', referer: otherRef },
+    'https://site.example.com/pic.png',
+    null,
+    { profile: CHROME }
+  );
+  assert.equal(crossImg.headers['sec-fetch-site'], 'cross-site');
+  assert.equal(crossImg.headers.referer, undefined); // never leak cross-origin referrer
+  assert.equal(crossImg.headers['user-agent'], CHROME.userAgent); // identity never flips mid-session
+
+  const apiCall = buildOutboundHeaders(
+    { accept: '*/*', referer: pageRef },
+    'https://site.example.com/api/data',
+    null,
+    { profile: CHROME }
+  );
+  assert.equal(apiCall.headers['sec-fetch-dest'], undefined); // browser sends empty
+  assert.equal(apiCall.fetchMode, 'cors');
+});
+
+test('stealth: detectKind maps accepts and extensions', () => {
+  assert.equal(detectKind({ clientHeaders: { accept: 'text/html,*/*' }, url: 'https://x.test/' }), 'document');
+  assert.equal(detectKind({ clientHeaders: { accept: 'text/css,*/*' }, url: 'https://x.test/a.css' }), 'style');
+  assert.equal(detectKind({ clientHeaders: { accept: 'image/avif,*/*' }, url: 'https://x.test/a.png' }), 'image');
+  assert.equal(detectKind({ clientHeaders: { accept: '*/*' }, url: 'https://x.test/a.mjs' }), 'script');
+  assert.equal(detectKind({ clientHeaders: { accept: '*/*' }, url: 'https://x.test/a.woff2' }), 'font');
+  assert.equal(detectKind({ clientHeaders: { accept: '*/*' }, url: 'https://x.test/api/v1' }), 'other');
+});
+
+test('stealth off: pass-through identity, no synthesized context', () => {
+  const { headers: h, fetchMode } = buildOutboundHeaders(
+    { 'user-agent': 'TestAgent/1.0', accept: 'text/html' },
+    'https://site.example.com/',
+    null,
+    { profile: null }
+  );
+  assert.equal(h['user-agent'], 'TestAgent/1.0');
+  assert.equal(h.accept, 'text/html');
+  assert.equal(h['sec-ch-ua'], undefined);
+  assert.equal(h['sec-fetch-site'], undefined);
+  assert.equal(h.priority, undefined);
+  assert.equal(fetchMode, undefined);
+});
+
+test('headers: cross-origin referer is dropped entirely (stealth on)', () => {
+  const { headers: h } = buildOutboundHeaders(
+    { referer: `https://proxy.example${proxyUrlFor('https://tracker-elsewhere.net/a')}` },
     'https://site.example.com/b',
-    null
+    null,
+    { profile: CHROME }
   );
   assert.equal(h.referer, undefined);
+  assert.equal(h['sec-fetch-site'], 'cross-site');
+});
+
+test('blocklist: global path rules apply on any host (guardian sensors)', () => {
+  const g = createBlocklist({
+    hosts: [],
+    paths: { prefixes: ['/_px/', '/D/1/', '/kas/'], exact: ['/_Incapsula_Resource', '/Shape'] },
+  });
+  assert.equal(g.check('https://any-store.example/D/1/abc123').blocked, true);
+  assert.equal(g.check('https://shop.example/_px/v4/sensor').blocked, true);
+  assert.equal(g.check('https://news.example/kas/xyz.js').blocked, true);
+  assert.equal(g.check('https://www.example.com/_Incapsula_Resource?SWK').blocked, true);
+  assert.equal(g.check('https://x.example/Shape').blocked, true);
+  // near-misses stay open
+  assert.equal(g.check('https://shop.example/D/1').blocked, false);
+  assert.equal(g.check('https://shop.example/D1/x').blocked, false);
+  assert.equal(g.check('https://shop.example/kashmir-tour/').blocked, false);
+});
+
+test('real config: ships working guardian + tracker coverage', () => {
+  const cfg = loadConfig();
+  const b = createBlocklist(cfg.trackers);
+  // classic trackers
+  assert.equal(b.check('https://www.google-analytics.com/j/collect').blocked, true);
+  assert.equal(b.check('https://static.hotjar.com/c/h.js').blocked, true);
+  // bot guardians
+  assert.equal(b.check('https://cdn.pxchk.net/sensor.js').blocked, true);
+  assert.equal(b.check('https://akstat.io/svc/bc=123').blocked, true);
+  assert.equal(b.check('https://anyhost.io/_px/collect').blocked, true);
+  assert.equal(b.check('https://anyhost.io/D/1/token').blocked, true);
+  assert.equal(b.check('https://www.google.com/recaptcha/api.js').blocked, true);
+  assert.equal(b.check('https://challenges.cloudflare.com/turnstile/v0/api.js').blocked, true);
+  // ordinary browsing stays open
+  assert.equal(b.check('https://www.example.com/').blocked, false);
+  assert.equal(b.check('https://registry.npmjs.org/veil').blocked, false);
 });
 
 test('headers: proxiedRefererToUpstream decodes /p/ URLs, ignores others', () => {

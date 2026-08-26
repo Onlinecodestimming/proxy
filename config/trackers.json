@@ -1,5 +1,6 @@
 {
-  "$comment": "Domains blocked outright (never fetched). A bare host is an exact match; '*.example.com' matches that host plus any subdomain. 'endpoints' block specific paths on otherwise-safe hosts; 'wildcard' extends an endpoint rule to all subdomains, 'exact' lists exact pathnames, 'prefixes' list path prefixes. Edit freely.",
+  "$comment": "Domains blocked outright (never fetched). A bare host is an exact match; '*.example.com' matches that host plus any subdomain. 'endpoints' block specific paths on otherwise-safe hosts; 'wildcard' extends an endpoint rule to all subdomains, 'exact' lists exact pathnames, 'prefixes' list path prefixes. 'paths' blocks paths on ANY host. Edit freely.",
+  "$guardian": "Everything from 'pxchk.net' to 'recaptcha.net' in 'hosts' (plus the 'paths' section and the /recaptcha/ endpoint) targets bot 'guardian' systems: DataDome, PerimeterX, Kasada, Akamai Bot Manager, Imperva/Incapsula, F5 Shape, Cloudflare Turnstile, reCAPTCHA, hCaptcha, Arkose. Blocking their telemetry means they can't profile you. Trade-off: sites that actively challenge visitors may show a stuck challenge. Delete those entries if you'd rather get challenged than be seen.",
   "hosts": [
     "google-analytics.com", "*.google-analytics.com",
     "googletagmanager.com", "*.googletagmanager.com",
@@ -57,7 +58,17 @@
     "ct.pinterest.com",
     "px.ads.linkedin.com",
     "analytics.tiktok.com", "*.analytics.tiktok.com",
-    "ads-twitter.com", "*.ads-twitter.com"
+    "ads-twitter.com", "*.ads-twitter.com",
+
+    "pxchk.net", "*.pxchk.net",
+    "datadome.co", "*.datadome.co",
+    "akstat.io", "*.akstat.io",
+    "kasada.io", "*.kasada.io",
+    "arkoselabs.com", "*.arkoselabs.com",
+    "challenges.cloudflare.com",
+    "geo.captcha-delivery.com",
+    "hcaptcha.com", "*.hcaptcha.com",
+    "recaptcha.net", "*.recaptcha.net"
   ],
   "endpoints": [
     { "host": "google.com", "wildcard": true, "prefixes": ["/ads/", "/pagead/", "/async-ad-status", "/analytics/", "/tagmanager/"], "exact": [] },
@@ -65,6 +76,12 @@
     { "host": "facebook.com", "wildcard": true, "prefixes": ["/ads/"], "exact": ["/tr", "/fbevents.js"] },
     { "host": "twitter.com", "wildcard": true, "prefixes": [], "exact": ["/i/adsct"] },
     { "host": "x.com", "wildcard": true, "prefixes": [], "exact": ["/i/adsct"] },
-    { "host": "yandex.ru", "wildcard": true, "prefixes": [], "exact": ["/ym"] }
-  ]
+    { "host": "yandex.ru", "wildcard": true, "prefixes": [], "exact": ["/ym"] },
+    { "host": "google.com", "wildcard": true, "prefixes": ["/recaptcha/"], "exact": [] }
+  ],
+  "paths": {
+    "$comment": "Global path rules that apply on ANY host — on-site bot-guardian sensor uploads.",
+    "prefixes": ["/_px/", "/kas/", "/D/1/", "/akam/"],
+    "exact": ["/_Incapsula_Resource", "/Shape"]
+  }
 }
