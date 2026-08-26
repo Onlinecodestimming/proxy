@@ -1,0 +1,28 @@
+{
+  "$comment": "Query-string parameters that carry marketing/analytics attribution. 'exact' names match case-insensitively; 'prefixes' match any parameter name that starts with them. Edit freely.",
+  "exact": [
+    "fbclid", "gclid", "gbraid", "wbraid", "dclid",
+    "igshid", "igsh",
+    "mc_cid", "mc_eid", "mkt_tok",
+    "spm", "spm_src",
+    "ref", "ref_src", "ref_url", "ref_medium", "ref_t",
+    "yclid", "olpId", "olp_id", "wickedid",
+    "trk", "msclkid", "twclid", "irclickid", "clickid", "click_id",
+    "s_kwcid", "li_fat_id", "li_track", "li_mc",
+    "_gl", "vero_elp", "utm",
+    "mbid", "cmpid", "cmp", "ncid", "pcid",
+    "hsCtaTracking", "_hsenc", "_hsmi", "hsmi",
+    "mtmtrack", "network_id", "ad_id", "adgroupid", "placement_id",
+    "fb", "_openstat", "s_cid"
+  ],
+  "prefixes": [
+    "utm_",
+    "hsa_",
+    "_branch_",
+    "mtm_",
+    "af_sub",
+    "trk_",
+    "olp_",
+    "s_kwcid_"
+  ]
+}

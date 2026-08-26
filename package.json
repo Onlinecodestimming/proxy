@@ -1,0 +1,16 @@
+{
+  "name": "veil",
+  "version": "0.1.0",
+  "description": "Zero-dependency anti-tracking web proxy: strips tracking parameters, blocks tracker domains, filters tracking cookies, and sanitizes HTML before it reaches your browser.",
+  "type": "module",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT"
+}

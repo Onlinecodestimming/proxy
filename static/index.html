@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>veil — anti-tracking proxy</title>
+<style>
+:root { --bg:#06080c; --panel:#0c111a; --line:#1c2637; --text:#c8d6e5; --dim:#6b7f99; --accent:#5cd6ff; --ok:#3ddc97; --bad:#ff6b81; }
+* { box-sizing:border-box; }
+body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #0d1830 0%, var(--bg) 55%); color:var(--text); font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; min-height:100vh; }
+main { max-width:880px; margin:0 auto; padding:48px 20px 80px; }
+h1 { font-size:34px; margin:0 0 4px; letter-spacing:-.5px; }
+.tagline { color:var(--dim); margin:0 0 28px; max-width:60ch; }
+form.go { display:flex; gap:8px; }
+form.go input { flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:10px; padding:13px 16px; font:14px ui-monospace,SFMono-Regular,Menlo,monospace; outline:none; min-width:0; }
+form.go input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(92,214,255,.12); }
+form.go button { background:var(--accent); color:#04121a; border:none; border-radius:10px; padding:0 22px; font-weight:600; cursor:pointer; font-size:14px; }
+form.go button:hover { filter:brightness(1.12); }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 30px; }
+.chips button { background:transparent; border:1px solid var(--line); color:var(--dim); border-radius:999px; padding:5px 12px; cursor:pointer; font-size:12.5px; }
+.chips button:hover { color:var(--accent); border-color:var(--accent); }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:10px; }
+.stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.stat .n { font:600 26px ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+.stat .l { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; }
+#blocked { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:8px; max-height:190px; overflow:auto; }
+#blocked .head { color:var(--dim); font-size:12.5px; }
+#blocked-list { list-style:none; margin:8px 0 0; padding:0; }
+#blocked-list .row { display:flex; gap:10px; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; padding:3px 0; border-bottom:1px dashed #141c2b; }
+#blocked-list .row:last-child { border-bottom:none; }
+#blocked-list .host { color:var(--bad); white-space:nowrap; }
+#blocked-list .why { color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+h2 { font-size:14px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin:34px 0 12px; }
+ul.tick { list-style:none; padding:0; margin:0; columns:2; column-gap:36px; }
+ul.tick li { padding:4px 0 4px 22px; position:relative; break-inside:avoid; }
+ul.tick li::before { content:"✓"; position:absolute; left:0; color:var(--ok); }
+ul.cross li::before { content:"✕"; color:var(--bad); }
+footer { margin-top:44px; color:var(--dim); font-size:12.5px; border-top:1px solid var(--line); padding-top:16px; }
+a { color:var(--accent); }
+code { background:#0a0f17; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+<h1>🛡 veil</h1>
+<p class="tagline">an anti-tracking web proxy. every page you open goes through it — attribution params scrubbed, tracker domains never contacted, tracking cookies dropped, and the page rewritten so nothing reaches your browser un-sanitized.</p>
+
+<form class="go" id="go">
+  <input id="url" type="text" placeholder="https://example.com — paste a link, we'll strip it clean" autocomplete="off" spellcheck="false" autofocus>
+  <button type="submit">browse</button>
+</form>
+<div class="chips">
+  <button data-u="https://example.com/">example.com</button>
+  <button data-u="https://en.wikipedia.org/wiki/Privacy">wikipedia</button>
+  <button data-u="https://news.ycombinator.com/">hacker news</button>
+  <button data-u="https://www.bbc.com/news">bbc</button>
+  <button data-u="https://archive.org/">archive.org</button>
+</div>
+
+<section class="stats">
+  <div class="stat"><div class="n" id="s-proxied">0</div><div class="l">requests sanitized</div></div>
+  <div class="stat"><div class="n" id="s-blocked">0</div><div class="l">trackers blocked</div></div>
+  <div class="stat"><div class="n" id="s-params">0</div><div class="l">tracking params stripped</div></div>
+  <div class="stat"><div class="n" id="s-cookies">0</div><div class="l">tracking cookies dropped</div></div>
+</section>
+<section id="blocked">
+  <div class="head">recently blocked</div>
+  <ul id="blocked-list"><li style="color:var(--dim);font-size:12.5px;padding:3px 0">— nothing yet, go browse something —</li></ul>
+</section>
+
+<h2>what veil strips on every hop</h2>
+<ul class="tick">
+  <li>attribution &amp; UTM query params (<code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>_gl</code>, …)</li>
+  <li>known tracker &amp; ad domains — Google Analytics, GTM, Clarity, Hotjar, Criteo, Taboola and ~100 more</li>
+  <li>tracking cookies (<code>_ga</code>, <code>_fbp</code>, <code>_mkto_*</code>, <code>demdex</code>, …) while keeping your first-party session</li>
+  <li>referrer leakage — upstream only ever sees the site's own bare origin</li>
+  <li>fingerprint headers: <code>Sec-Ch-Ua*</code>, <code>sec-fetch-*</code>, <code>Origin</code></li>
+  <li>redirect hops get the same scrubbing — trackers can't re-attach params mid-journey</li>
+  <li>your IP goes out through this proxy, not your machine</li>
+</ul>
+
+<h2>what no proxy can do — read before trusting it</h2>
+<ul class="tick cross">
+  <li>stop a page's own JavaScript from canvas/WebGL/audio fingerprinting — that script runs in your browser</li>
+  <li>see first-party tracking (a site logging <em>you</em> on its own servers)</li>
+  <li>hide the fact that you browse, or what you browse (TLS metadata + the proxy's egress IP)</li>
+  <li>protect websocket or other non-HTTP traffic</li>
+</ul>
+
+<footer>
+  zero dependencies · in-memory only, no logs written · telemetry: <a href="/stats">/stats</a> · reset counters: <a href="/stats/reset">/stats/reset</a><br>
+  for personal privacy. don't point it at sites you'd break the terms of, and treat "no tracking" as "a lot less tracking".
+</footer>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+function go(u) {
+  u = (u || '').trim();
+  if (!u) return;
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  location.href = '/p/' + encodeURIComponent(u);
+}
+$('#go').addEventListener('submit', (e) => { e.preventDefault(); go($('#url').value); });
+document.querySelectorAll('#chips button').forEach((b) => b.addEventListener('click', () => go(b.dataset.u)));
+async function poll() {
+  try {
+    const s = await (await fetch('/stats')).json();
+    $('#s-proxied').textContent = s.proxied;
+    $('#s-blocked').textContent = s.trackersBlocked;
+    $('#s-params').textContent = s.paramsStripped;
+    $('#s-cookies').textContent = s.cookiesStripped;
+    const list = $('#blocked-list');
+    list.innerHTML = '';
+    const rows = (s.recentBlocks || []).slice(0, 12);
+    if (!rows.length) {
+      list.innerHTML = '<li style="color:var(--dim);font-size:12.5px;padding:3px 0">— nothing yet, go browse something —</li>';
+      return;
+    }
+    for (const b of rows) {
+      const li = document.createElement('li'); li.className = 'row';
+      let host = b.url;
+      try { host = new URL(b.url).hostname; } catch {}
+      const h = document.createElement('span'); h.className = 'host'; h.textContent = host;
+      const w = document.createElement('span'); w.className = 'why'; w.textContent = b.reason; w.title = b.url;
+      li.append(h, w); list.append(li);
+    }
+  } catch {}
+}
+poll();
+setInterval(poll, 4000);
+</script>
+</body>
+</html>
