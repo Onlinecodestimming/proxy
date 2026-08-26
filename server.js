@@ -3,9 +3,12 @@
 //
 //   /            front page
 //   /p/<url>     proxy target (url is encodeURIComponent(url))
+//   GET http://… absolute-form proxy request (system-proxy mode)
+//   CONNECT      blind TLS tunnel (IP masking only — see README)
 //   /stats       JSON counters  ·  /stats/reset zeroes them
 
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,6 +20,7 @@ import { createParamMatcher } from './lib/params.js';
 import { createCookiePolicy, CookieJar } from './lib/cookies.js';
 import { createProxyHandler } from './lib/proxy.js';
 import { loadProfiles } from './lib/stealth.js';
+import { assertPublicHost } from './lib/ssrf.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'static', 'index.html'), 'utf8');
@@ -56,6 +60,29 @@ export function createVeilServer({ allowLoopback = false, fetchImpl, trackers, p
   });
 
   function route(req, res) {
+    // System-proxy absolute-form request: the browser sends the target URL
+    // itself ("GET http://site.com/page HTTP/1.1") when Veil is configured
+    // as its HTTP proxy.
+    if (/^https?:\/\//i.test(req.url)) {
+      let target;
+      try {
+        target = new URL(req.url);
+      } catch {
+        res.writeHead(400, { 'content-type': 'text/plain' });
+        res.end('bad request');
+        return;
+      }
+      handleProxy(req, res, encodeURIComponent(target.href)).catch((err) => {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'text/plain' });
+          res.end(`veil internal error: ${err.message}`);
+        } else {
+          res.end();
+        }
+      });
+      return;
+    }
+
     let u;
     try {
       u = new URL(req.url, 'http://placeholder.invalid');
@@ -113,6 +140,40 @@ export function createVeilServer({ allowLoopback = false, fetchImpl, trackers, p
         res.end();
       }
     }
+  });
+
+  // CONNECT: used by browsers for HTTPS when Veil is their system proxy.
+  // This is a BLIND tunnel: bytes pass through untouched, so the site sees
+  // Veil's egress IP (masking) but gets NO sanitization — the browser talks
+  // to the site directly inside the tunnel. Full HTTPS sanitization only
+  // happens via the /p/ flow (front page), which is the protected mode.
+  server.on('connect', (req, clientSocket, head) => {
+    const [host, portStr] = String(req.url || '').split(':');
+    const port = Number(portStr || 443);
+    if (!host || Number.isNaN(port) || port < 1 || port > 65535) {
+      clientSocket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
+      clientSocket.destroy();
+      return;
+    }
+    assertPublicHost(host, { allowLoopback }).then(() => {
+      const upstream = net.connect(port, host, () => {
+        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+        stats.add('tunneled');
+        if (head && head.length) upstream.write(head);
+        upstream.pipe(clientSocket);
+        clientSocket.pipe(upstream);
+      });
+      upstream.on('error', () => clientSocket.destroy());
+      clientSocket.on('error', () => upstream.destroy());
+      upstream.on('close', () => clientSocket.destroy());
+      clientSocket.on('close', () => upstream.destroy());
+    }).catch((e) => {
+      const body = String(e.message || 'forbidden');
+      clientSocket.write(
+        `HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: ${body.length}\r\n\r\n${body}`
+      );
+      clientSocket.destroy();
+    });
   });
 
   return { server, stats, cookieJar, handleProxy, profileName };

@@ -59,6 +59,7 @@ code { background:#0a0f17; border:1px solid var(--line); border-radius:5px; padd
 
 <section class="stats">
   <div class="stat"><div class="n" id="s-proxied">0</div><div class="l">requests sanitized</div></div>
+  <div class="stat"><div class="n" id="s-tunneled">0</div><div class="l">https tunnels (ip masked)</div></div>
   <div class="stat"><div class="n" id="s-blocked">0</div><div class="l">trackers blocked</div></div>
   <div class="stat"><div class="n" id="s-params">0</div><div class="l">tracking params stripped</div></div>
   <div class="stat"><div class="n" id="s-cookies">0</div><div class="l">tracking cookies dropped</div></div>
@@ -106,6 +107,7 @@ async function poll() {
   try {
     const s = await (await fetch('/stats')).json();
     $('#s-proxied').textContent = s.proxied;
+    $('#s-tunneled').textContent = s.tunneled;
     $('#s-blocked').textContent = s.trackersBlocked;
     $('#s-params').textContent = s.paramsStripped;
     $('#s-cookies').textContent = s.cookiesStripped;

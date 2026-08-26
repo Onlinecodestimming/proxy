@@ -78,12 +78,43 @@ Telemetry (all in-memory, nothing written to disk): `GET /stats`, reset with
 `GET /stats/reset`. The front page shows live counters and a "recently blocked"
 feed.
 
+## Using it in a browser (drop-in modes)
+
+Requirements: **Node ≥ 18.17** (20+ recommended), that's it — no `npm install`,
+no build step. Copy the folder anywhere and `node server.js`.
+
+**Mode 1 — front page (recommended: fully protected)**
+Open `http://localhost:3000` and browse from there. The page **and every
+sub-resource** it loads go through Veil: params, trackers, cookies, identity —
+all sanitized. This is the mode that does everything.
+
+**Mode 2 — point your system/browser proxy at it (everything flows, split protection)**
+Configure `127.0.0.1:3000` as your HTTP(S) proxy:
+
+- **macOS**: System Settings → Network → your connection → Proxies → Web Proxy (HTTP) + Secure Web Proxy (HTTPS) → `127.0.0.1` : `3000`
+- **Windows**: Settings → Network & Internet → Proxy → Manual script/manual address → `127.0.0.1:3000`
+- **Firefox**: Settings → Network Settings → Manual proxy → `127.0.0.1` : `3000` (leave "no proxy for" empty)
+- **Chromium**: launch with `--proxy-server="http=127.0.0.1:3000;https=127.0.0.1:3000"`
+
+What each protocol gets in this mode:
+
+| Traffic | Protection |
+| ------- | ---------- |
+| `http://` sites | **fully sanitized** (absolute-form requests are proxied like `/p/`) |
+| `https://` sites | **IP masking only** — Veil answers `CONNECT` with a blind TLS tunnel. Your IP is hidden behind the proxy's, but the browser talks to the site directly inside the tunnel: no param/cookie/tracker/identity sanitization |
+
+Veil deliberately does **not** MITM HTTPS (that would require installing a
+custom root CA trusted with *everything* you type). If you want full
+protection for HTTPS, use Mode 1 for that site.
+
 ## Endpoints
 
 | Path             | Purpose                                    |
 | ---------------- | ------------------------------------------ |
 | `/`              | front page                                 |
 | `/p/<urlencoded-url>` | proxy target (how all rewriting works) |
+| `GET http://…`   | absolute-form proxy request (Mode 2, HTTP) |
+| `CONNECT host:port` | blind TLS tunnel (Mode 2, HTTPS — IP mask only) |
 | `/stats`         | JSON counters + recent blocks              |
 | `/stats/reset`   | zero the counters                          |
 

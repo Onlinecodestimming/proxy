@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import { createVeilServer } from '../server.js';
 import { proxyUrlFor } from '../lib/rewrite.js';
 import { loadProfiles } from '../lib/stealth.js';
@@ -208,9 +209,87 @@ test('SSRF: internal targets are refused before any network call', async () => {
   }
 });
 
+test('system-proxy mode: absolute-form HTTP request is proxied and scrubbed', async () => {
+  // what a browser sends when veil is configured as its HTTP proxy
+  const r = await new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: vport,
+        method: 'GET',
+        path: `http://127.0.0.1:${mockPort}/page?utm_source=x&keep=1`, // absolute-form
+        headers: { accept: 'text/html,*/*' },
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (c) => (body += c));
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      }
+    );
+    req.on('error', reject);
+    req.end();
+  });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.includes('id="veil-hud"'));
+  const req = mockRequests[mockRequests.length - 1];
+  assert.equal(req.url, '/page?keep=1'); // utm_source stripped
+});
+
+function connectTunnel(target, getLine, getHeaders = {}) {
+  // raw-socket CONNECT through the proxy, then one raw GET inside the tunnel
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(vport, '127.0.0.1');
+    let buf = '';
+    let established = false;
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error('tunnel timeout'));
+    }, 5000);
+    sock.on('data', (d) => {
+      buf += d.toString('latin1');
+      if (!established && (buf.includes(' 200 ') || buf.includes(' 403 '))) {
+        if (buf.includes(' 403 ')) {
+          clearTimeout(timer);
+          sock.end();
+          return resolve({ blocked: true, buf });
+        }
+        established = true;
+        const h = Object.entries(getHeaders)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\r\n');
+        sock.write(`${getLine}\r\nHost: ${target}\r\n${h ? h + '\r\n' : ''}Connection: close\r\n\r\n`);
+      } else if (established && (buf.includes('</html>') || / 404 /.test(buf))) {
+        clearTimeout(timer);
+        sock.end();
+        resolve({ blocked: false, buf });
+      }
+    });
+    sock.on('error', reject);
+    sock.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`);
+  });
+}
+
+test('system-proxy mode: CONNECT tunnels (IP masked, honestly blind) + SSRF-guarded', async () => {
+  const r = await connectTunnel(
+    `127.0.0.1:${mockPort}`,
+    'GET /page?utm_source=untouched HTTP/1.1',
+    { 'User-Agent': 'RAW-CLIENT/1' }
+  );
+  assert.equal(r.blocked, false);
+  assert.ok(r.buf.includes('<!doctype html>')); // the mock's raw page, straight through
+  const req = mockRequests[mockRequests.length - 1];
+  assert.equal(req.url, '/page?utm_source=untouched'); // NOT scrubbed — tunnel is blind
+  assert.equal(req.ua, 'RAW-CLIENT/1'); // NOT the stealth identity — blind tunnel
+
+  // internal targets are refused even for tunnels
+  const bad = await connectTunnel('169.254.169.254:80', 'GET / HTTP/1.1');
+  assert.equal(bad.blocked, true);
+});
+
 test('telemetry: counters reflect what happened', async () => {
   const s = await (await fetch(`http://127.0.0.1:${vport}/stats`)).json();
   assert.ok(s.proxied >= 4);
+  assert.ok(s.tunneled >= 1);
   assert.ok(s.trackersBlocked >= 3);
   assert.ok(s.paramsStripped >= 3);
   assert.ok(s.cookiesStripped >= 1);
