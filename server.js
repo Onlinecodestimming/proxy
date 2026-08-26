@@ -24,6 +24,7 @@ import { assertPublicHost } from './lib/ssrf.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'static', 'index.html'), 'utf8');
+const FIXTURE_GMAIL_HTML = fs.readFileSync(path.join(__dirname, 'static', 'fixtures', 'gmail-mock.html'), 'utf8');
 
 /**
  * Resolve the stealth profile to use.
@@ -109,9 +110,17 @@ export function createVeilServer({ allowLoopback = false, fetchImpl, trackers, p
       res.end('{}');
       return;
     }
-    if (p === '/favicon.ico') {
+    if (req.method === 'GET' && p === '/favicon.ico') {
       res.writeHead(204);
       res.end();
+      return;
+    }
+    if (req.method === 'GET' && (p === '/fixtures/gmail' || p === '/fixtures/gmail.html')) {
+      // Screen-capture test fixture (see README "Test fixtures"): a clearly
+      // labeled mock inbox with live clock/frame counter and resolution tests.
+      // Deliberately no sign-in form and no credential fields of any kind.
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(FIXTURE_GMAIL_HTML);
       return;
     }
     if (p.startsWith('/p/')) {

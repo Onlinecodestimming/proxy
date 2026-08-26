@@ -150,6 +150,29 @@ A proxy cannot do the impossible. Veil does **not**:
 Treat it as "a lot less tracking, and a boring identity", not "invisible to
 a nation-state".
 
+## Test fixtures (for monitoring-tool QA)
+
+`GET /fixtures/gmail` serves a **screen-capture test fixture**: a page that
+structurally resembles the Gmail inbox UI, filled with obviously-fake mail,
+and instrumented for capture verification:
+
+- a live clock (1 s tick) + frame counter (100 ms) — a stale capture shows
+  them frozen
+- 8pt fine-print and Greek-letter rows — resolution/downscale checks
+- color squares — color sampling checks
+- a deliberately non-real "PII" row (SSN `000-00-0000`) — tests PII redaction
+
+Point your own monitoring/capture tool at it and check what it actually sees.
+Useful QA insight it encodes: **screen capture alone is not the whole
+picture** — the URL bar and activity feed reveal what a page really is, so a
+monitor that only records pixels is weaker than one that also logs URLs and
+processes.
+
+What the fixture is **not**: it has no sign-in form, no credential fields of
+any kind, and is clearly labeled on-screen. It is a test double for your own
+tools on machines you monitor — not a page to run at someone being
+supervised.
+
 ## Security notes
 
 - No dependencies, no build step — Node ≥ 18.17 (`fetch`, `node:test`).

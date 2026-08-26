@@ -303,3 +303,16 @@ test('front page and 404s', async () => {
   assert.ok(home.includes('veil'));
   assert.equal((await fetch(`http://127.0.0.1:${vport}/nope`)).status, 404);
 });
+
+test('capture test fixture: served, labeled, and credential-free', async () => {
+  const r = await fetch(`http://127.0.0.1:${vport}/fixtures/gmail`);
+  assert.equal(r.status, 200);
+  assert.ok((r.headers.get('content-type') || '').includes('text/html'));
+  const html = await r.text();
+  assert.ok(html.includes('CAPTURE FIXTURE')); // clearly labeled
+  assert.ok(html.includes('NOT real Gmail'));
+  // deliberately NOT a phishing page: no sign-in / password surface at all
+  assert.ok(!/password/i.test(html));
+  assert.ok(!/type=["']password/i.test(html));
+  assert.ok(!/name=["']user/i.test(html));
+});
