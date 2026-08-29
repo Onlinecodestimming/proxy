@@ -1,0 +1,56 @@
+{
+  "$comment": "Browser identity profiles. Veil speaks as ONE boring mainstream browser on every request, so neither the client's real device nor the proxy's stack ever identifies the user. Set the active profile via VEIL_PROFILE (name, or 'none' for pass-through headers).",
+  "default": "chrome-win",
+  "profiles": {
+    "chrome-win": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      "secChUa": "\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\"",
+      "secChUaMobile": "?0",
+      "secChUaPlatform": "\"Windows\"",
+      "secChUaPlatformVersion": "\"15.0.0\"",
+      "acceptLanguage": "en-US,en;q=0.9",
+      "acceptEncoding": "gzip, deflate, br",
+      "accepts": {
+        "document": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "script": "*/*",
+        "style": "text/css,*/*;q=0.1",
+        "image": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "font": "*/*",
+        "other": "*/*"
+      },
+      "priorities": {
+        "document": "u=0,i",
+        "script": "u=1,i",
+        "style": "u=1,i",
+        "image": "u=3,i",
+        "font": "u=2,i",
+        "other": "u=1,i"
+      }
+    },
+    "firefox-win": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+      "secChUa": null,
+      "secChUaMobile": "?0",
+      "secChUaPlatform": "\"Windows\"",
+      "secChUaPlatformVersion": null,
+      "acceptLanguage": "en-US,en;q=0.9",
+      "acceptEncoding": "gzip, deflate, br",
+      "accepts": {
+        "document": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "script": "*/*",
+        "style": "text/css,*/*;q=0.1",
+        "image": "image/avif,image/webp,*/*;q=0.8",
+        "font": "*/*",
+        "other": "*/*"
+      },
+      "priorities": {
+        "document": "u=0,i",
+        "script": "u=1,i",
+        "style": "u=1,i",
+        "image": "u=2,i",
+        "font": "u=2,i",
+        "other": "u=1,i"
+      }
+    }
+  }
+}

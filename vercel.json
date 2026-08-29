@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/p/:path*", "destination": "/api/p/[...url]" },
+    { "source": "/stats/reset", "destination": "/api/stats" },
+    { "source": "/stats", "destination": "/api/stats" },
+    { "source": "/fixtures/gmail", "destination": "/static/fixtures/gmail-mock.html" },
+    { "source": "/fixtures/gmail.html", "destination": "/static/fixtures/gmail-mock.html" },
+    { "source": "/", "destination": "/static/index.html" }
+  ]
+}

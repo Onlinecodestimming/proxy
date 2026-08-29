@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gmail — capture test fixture (NOT real Gmail)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 Roboto, "Helvetica Neue", Arial, sans-serif; background:#fff; color:#202124; }
+  .topbar { display:flex; align-items:center; gap:12px; padding:8px 16px; border-bottom:1px solid #e0e0e0; }
+  .menu { width:40px; height:40px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; color:#5f6368; }
+  .menu:hover { background:#f1f3f4; }
+  .brand { font-size:22px; color:#5f6368; font-weight:400; white-space:nowrap; }
+  .brand b { color:#4285f4; font-weight:500; }
+  .search { flex:1; max-width:720px; background:#f1f3f4; border-radius:20px; padding:10px 20px; color:#5f6368; display:flex; gap:10px; align-items:center; }
+  .spacer { flex:1; }
+  .iconbtn { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#5f6368; font-size:16px; }
+  .iconbtn:hover { background:#f1f3f4; }
+  .avatar { width:32px; height:32px; border-radius:50%; background:#1a73e8; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:500; }
+  .layout { display:flex; height:calc(100vh - 61px); }
+  .sidebar { width:256px; padding:16px 8px; overflow-y:auto; }
+  .compose { background:#c2e7ff; color:#001d35; border:none; border-radius:18px; padding:12px 24px; font-size:14px; font-weight:500; display:flex; gap:8px; align-items:center; cursor:pointer; margin:0 8px 16px; width:calc(100% - 16px); }
+  .compose:hover { background:#a1d6ff; box-shadow:0 1px 2px rgba(0,0,0,.3); }
+  .side-item { display:flex; gap:20px; padding:8px 24px; border-radius:0 20px 20px 0; color:#444746; cursor:pointer; font-size:14px; white-space:nowrap; }
+  .side-item:hover { background:#f1f3f4; }
+  .side-item.active { background:#d3e3fd; font-weight:700; color:#001d35; }
+  .side-item .n { margin-left:auto; font-weight:400; color:#5f6368; }
+  .main { flex:1; overflow-y:auto; padding:16px 24px; }
+  .inbox-title { font-size:16px; color:#444746; margin-bottom:12px; }
+  .toolbar { display:flex; gap:8px; align-items:center; border-bottom:1px solid #e0e0e0; padding:8px 0; color:#5f6368; font-size:13px; }
+  .count { margin-left:auto; font-size:12px; }
+  .row { display:grid; grid-template-columns:24px 24px 220px 1fr 60px; gap:12px; align-items:center; padding:9px 8px; border-bottom:1px solid #f1f3f4; cursor:pointer; }
+  .row.unread { font-weight:700; }
+  .row:hover { box-shadow:0 1px 2px rgba(60,64,67,.3); }
+  .row .box, .row .star { color:#bdc1c6; font-size:13px; }
+  .row .subj { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .snip { color:#5f6368; font-weight:400; }
+  .row .time { font-size:12px; color:#5f6368; font-weight:400; text-align:right; }
+  .badge { position:fixed; top:8px; right:12px; z-index:99; display:flex; gap:10px; align-items:center; background:#fff3cd; border:1px solid #e6c35c; border-radius:8px; padding:6px 12px; font:12px ui-monospace, SFMono-Regular, Menlo, monospace; color:#664d03; }
+  .fixture-foot { margin-top:32px; padding:16px; border:1px dashed #e0e0e0; border-radius:8px; color:#5f6368; font-size:12px; }
+  .tiny { font-size:8px; color:#80868b; }
+  .dots { display:flex; gap:6px; margin-top:8px; }
+  .dot { width:16px; height:16px; border-radius:3px; }
+</style>
+</head>
+<body>
+
+<div class="badge" title="Screen-capture test fixture — verify clock ticks and frame counter in your capture">
+  🧪 CAPTURE FIXTURE · clock <span id="clock">--:--:--</span> · frame <span id="frame">0</span> · NOT real Gmail
+</div>
+
+<div class="topbar">
+  <div class="menu">☰</div>
+  <div class="brand">G<b>mail</b></div>
+  <div class="search">🔍 Search mail (fixture — non-functional)</div>
+  <div class="spacer"></div>
+  <div class="iconbtn" title="apps grid (decorative)">▦</div>
+  <div class="iconbtn" title="help (decorative)">?</div>
+  <div class="avatar" title="test account (decorative)">T</div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <button class="compose">✏️ Compose (decorative)</button>
+    <div class="side-item active">📥 Inbox <span class="n">7</span></div>
+    <div class="side-item">⭐ Starred</div>
+    <div class="side-item">🕓 Snoozed</div>
+    <div class="side-item">↗️ Sent</div>
+    <div class="side-item">📝 Drafts <span class="n">1</span></div>
+    <div class="side-item">🗑️ Trash</div>
+    <div class="side-item">🏷️ Labels</div>
+  </div>
+
+  <div class="main">
+    <div class="inbox-title">Inbox <span style="font-size:12px;color:#80868b">(fixture data)</span></div>
+    <div class="toolbar">
+      <span>☑</span><span>⟳</span><span>⋮</span>
+      <span class="count">1–7 of 7</span>
+    </div>
+
+    <div class="row unread"><span class="box">☐</span><span class="star">☆</span>
+      <span>capture-test@example.com</span>
+      <span class="subj">Fixture row 1 — capture me <span class="snip">— This row exists so a screen capture has something readable.</span></span>
+      <span class="time">12:01</span></div>
+
+    <div class="row"><span class="box">☐</span><span class="star">☆</span>
+      <span>frame-check@example.com</span>
+      <span class="subj">Fixture row 2 — clock sync <span class="snip">— The badge top-right ticks every second and counts frames every 100 ms.</span></span>
+      <span class="time">12:02</span></div>
+
+    <div class="row unread"><span class="box">☐</span><span class="star">☆</span>
+      <span>resolution-test@example.com</span>
+      <span class="subj">Fixture row 3 — 8pt text <span class="snip">— Small print near the bottom checks capture resolution.</span></span>
+      <span class="time">11:58</span></div>
+
+    <div class="row"><span class="box">☐</span><span class="star">☆</span>
+      <span>color-test@example.com</span>
+      <span class="subj">Fixture row 4 — color fidelity <span class="snip">— Color squares near the bottom check color sampling.</span></span>
+      <span class="time">11:47</span></div>
+
+    <div class="row"><span class="box">☐</span><span class="star">☆</span>
+      <span>negative@example.com</span>
+      <span class="subj">Fixture row 5 — high contrast <span class="snip">— High-contrast text checks thresholding and downscaling.</span></span>
+      <span class="time">11:30</span></div>
+
+    <div class="row unread"><span class="box">☐</span><span class="star">☆</span>
+      <span>pii-fixture@example.com</span>
+      <span class="subj">Fixture row 6 — fake PII (deliberately non-real) <span class="snip">— SSN 000-00-0000 · DOB 1900-01-01 · check your tool's PII redaction.</span></span>
+      <span class="time">11:12</span></div>
+
+    <div class="row"><span class="box">☐</span><span class="star">☆</span>
+      <span>done@example.com</span>
+      <span class="subj">Fixture row 7 — end of pattern <span class="snip">— Rows stop here; scrolling past is a capture-buffer test.</span></span>
+      <span class="time">10:55</span></div>
+
+    <div class="fixture-foot">
+      <b>Screen-capture test fixture.</b> Served by a local monitoring-test server. Contains no real mail,
+      no accounts, and no sign-in form. The clock and frame counter let you verify capture freshness;
+      if your capture is stale, they will be frozen.
+      <div class="tiny">8pt resolution test: The quick brown fox jumps over the lazy dog. 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ — fine detail — μ — ∂ — ∑</div>
+      <div class="dots">
+        <span class="dot" style="background:#d93025"></span>
+        <span class="dot" style="background:#188038"></span>
+        <span class="dot" style="background:#1a73e8"></span>
+        <span class="dot" style="background:#f9ab00"></span>
+        <span class="dot" style="background:#80868b"></span>
+        <span class="dot" style="background:#202124"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var clock = document.getElementById('clock');
+  var frame = document.getElementById('frame');
+  var n = 0;
+  setInterval(function () {
+    var d = new Date();
+    var p = function (x) { return String(x).padStart(2, '0'); };
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }, 1000);
+  setInterval(function () { frame.textContent = String(n++); }, 100);
+})();
+</script>
+</body>
+</html>
